@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title></title>
+    <!--<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.min.js"></script> -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.7/angular.js"></script>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="750" height="500">
+      <p>Your browser doesn't support canvas.</p>
+    </canvas>
+    <div id="colorPreviewID" ng-controller='colorPreviewController' ng-app="colorPreview" ng-init="ColorPreviewInit()">
+
+      <br />
+      Example: 
+      <select id="selExampleID" ng-model="selExample" ng-change="ExampleSelectorChanged()">
+        <option value="selFocal">Focal</option>
+        <option value="selGoogleHangouts">Google Hangouts</option>
+        <option value="selGoogleKeep">Google Keep</option>
+        <option value="selGMail">GMail</option>
+      </select>
+
+      <br />
+
+      <table style="display: inline-block">
+        <tr>
+          <th></th>
+          <th>Red</th>
+          <th>Green</th>
+          <th>Blue</th>
+        </tr>
+        <tr>
+          <td>Status Bar</td>
+          <td><input ng-model="colorTemplate.sb.r" ng-change="DrawColors()" value="{{colorTemplate.sb.r}}" maxlength="3"></td>
+          <td><input ng-model="colorTemplate.sb.g" ng-change="DrawColors()" value="{{colorTemplate.sb.g}}" maxlength="3"></td>
+          <td><input ng-model="colorTemplate.sb.b" ng-change="DrawColors()" value="{{colorTemplate.sb.b}}" maxlength="3"></td>
+        </tr>
+        <tr>
+          <td>Action Bar</td>
+          <td><input ng-model="colorTemplate.ab.r" ng-change="DrawColors()" value="{{colorTemplate.ab.r}}" maxlength="3"></td>
+          <td><input ng-model="colorTemplate.ab.g" ng-change="DrawColors()" value="{{colorTemplate.ab.g}}" maxlength="3"></td>
+          <td><input ng-model="colorTemplate.ab.b" ng-change="DrawColors()" value="{{colorTemplate.ab.b}}" maxlength="3"></td>
+        </tr>
+      </table>
+
+      <br/>
+      <br/>
+
+      <table style="display: inline-block">
+        <tr>
+          <td>Red</td>
+          <td>{{rDiff_Str}}</td>
+        </tr>
+        <tr>
+          <td>Green</td>
+          <td>{{gDiff_Str}}</td>
+        </tr>
+        <tr>
+          <td>Blue</td>
+          <td>{{bDiff_Str}}</td>
+        </tr>
+        <tr>
+          <td>Hue</td>
+          <td>{{hDiff_Str}}</td>
+        </tr>
+        <tr>
+          <td>Saturation</td>
+          <td>{{sDiff_Str}}</td>
+        </tr>
+        <tr>
+          <td>Brightness</td>
+          <td>{{vDiff_Str}}</td>
+        </tr>
+      </table>
+
+      <br/>
+      <br/>
+
+      Status Bar Height <input ng-model="sbHeight" ng-change="DrawColors()" value="{{sbHeight}}">
+      
+      <br/>
+
+      Action Bar Height <input ng-model="abHeight" ng-change="DrawColors()" value="{{abHeight}}">
+
+    </div>
+  </body>
+</html>
+
+<script type ="text/javascript">
+
+////////////////////////////////
+///
+
+  function ToHexString(num) {
+
+    var str; 
+
+    if (typeof(num) == 'number') {
+      str = num.toString(16);
+    } else if (num == null) {
+      return '00';
+    } else {
+      str = parseInt(num).toString(16);
+    }
+
+    if (str.length == 0) {
+      return '00';
+    } else if (str.length == 1) {
+      return '0' + str;
+    }
+
+    return str;
+
+  }
+
+  function HSVStats(_r, _g, _b) {
+
+    var rr, gg, bb;
+    var h, s;
+
+    var r = _r / 255;
+    var g = _g / 255;
+    var b = _b / 255;
+    var v = Math.max(r, g, b);
+
+    var diff = v - Math.min(r, g, b);
+    var diffc = function(c) {
+        return (v - c) / 6 / diff + 1 / 2;
+    };
+
+    if (diff == 0) {
+        h = s = 0;
+    } else {
+
+        s = diff / v;
+        rr = diffc(r);
+        gg = diffc(g);
+        bb = diffc(b);
+
+        if (r === v) {
+            h = bb - gg;
+        } else if (g === v) {
+            h = (1 / 3) + rr - bb;
+        } else if (b === v) {
+            h = (2 / 3) + gg - rr;
+        }
+
+        if (h < 0) {
+            h += 1;
+        } else if (h > 1) {
+            h -= 1;
+        }
+
+    }
+
+    return {
+
+      h : Math.round(h * 360),
+      s : Math.round(s * 100),
+      v : Math.round(v * 100),
+
+    };
+
+  }
+
+  function CreateDiffString(diff, orig) {
+
+    perc = (Math.abs(diff) / orig) * 100.00;
+    perc = Math.round(perc * 100) / 100; // round to 2 decimal places
+
+    if (diff < 0) {
+      return perc + '% decrease';
+    } else if (diff > 0) {
+      return perc + '% increase';
+    }
+
+    return 'no change';
+
+  }
+
+////////////////////////////////
+///
+
+  function ParseOrNoopInt(_possibleInt) {
+    
+    if (typeof(_possibleInt) == 'number') {
+      return _possibleInt;
+    }
+
+    return parseInt(_possibleInt);
+
+  }
+
+  function ExColor(_r, _g, _b) {
+
+    r = ParseOrNoopInt(_r);
+    g = ParseOrNoopInt(_g);
+    b = ParseOrNoopInt(_b);
+    hsvObj = HSVStats(r, g, b);
+
+    this.r = r;
+    this.g = g;
+    this.b = b;
+
+    this.h = hsvObj.h;
+    this.s = hsvObj.s;
+    this.v = hsvObj.v;
+
+    var thz = this;
+
+    this.GetFillStyle = function() {
+      return "#" + ToHexString(thz.r) + ToHexString(thz.g) + ToHexString(thz.b);
+    };
+
+    this.HSV_ToString = function() {
+      return '' + thz.h + ',' + thz.s + ',' + thz.v;
+    };
+
+    this.RGB_ToString = function() {
+      return '' + thz.r + ',' + thz.g + ',' + thz.b;
+    };
+
+  }
+
+  function ExColorTemplate(sbExColor, abExColor, name) {
+    
+    this.sb = sbExColor;
+    this.ab = abExColor;
+    this.name = name;
+
+  }
+
+////////////////////////////////
+///
+
+  var examplesDict_Original = {};
+
+  examplesDict_Original['selFocal'] = new ExColorTemplate(
+    new ExColor(
+      56,
+      53,
+      89
+    ),
+    new ExColor(
+      71,
+      75,
+      119
+    ),
+    'Focal'
+  );
+
+  examplesDict_Original['selGMail'] = new ExColorTemplate(
+    new ExColor(
+      186,
+      50,
+      33
+    ),
+    new ExColor(
+      219,
+      68,
+      55
+    ),
+    'GMail'
+  );
+
+  examplesDict_Original['selGoogleHangouts'] = new ExColorTemplate(
+    new ExColor(
+      11,
+      128,
+      67
+    ),
+    new ExColor(
+      15,
+      157,
+      88
+    ),
+    'Google Hangouts'
+  );
+
+  examplesDict_Original['selGoogleKeep'] = new ExColorTemplate(
+    new ExColor(
+      249,
+      159,
+      0
+    ),
+    new ExColor(
+      255,
+      187,
+      0
+    ),
+    'Google Keep'
+  );
+
+////////////////////////////////
+///
+
+  function SanityCheck(ngScope) {
+
+    changed = false;
+
+    if (typeof(ngScope.colorTemplate.sb.r) != 'number') {
+      ngScope.colorTemplate.sb.r = parseInt(ngScope.colorTemplate.sb.r);
+    }
+
+    if (typeof(ngScope.colorTemplate.sb.g) != 'number') {
+      ngScope.colorTemplate.sb.g = parseInt(ngScope.colorTemplate.sb.g);
+    }
+
+    if (typeof(ngScope.colorTemplate.sb.b) != 'number') {
+      ngScope.colorTemplate.sb.b = parseInt(ngScope.colorTemplate.sb.b);
+    }
+
+    if (typeof(ngScope.colorTemplate.ab.r) != 'number') {
+      ngScope.colorTemplate.ab.r = parseInt(ngScope.colorTemplate.ab.r);
+    }
+
+    if (typeof(ngScope.colorTemplate.ab.g) != 'number') {
+      ngScope.colorTemplate.ab.g = parseInt(ngScope.colorTemplate.ab.g);
+    }
+
+    if (typeof(ngScope.colorTemplate.ab.b) != 'number') {
+      ngScope.colorTemplate.ab.b = parseInt(ngScope.colorTemplate.ab.b);
+    }
+
+    if (typeof(ngScope.sbHeight) != 'number') {
+      ngScope.sbHeight = Math.max(parseInt(ngScope.sbHeight), 48);
+    }
+
+    if (typeof(ngScope.abHeight) != 'number') {
+      ngScope.abHeight = Math.max(parseInt(ngScope.abHeight), 64);
+    }
+
+    if (ngScope.colorTemplate.sb.r < 0) {
+      
+      ngScope.colorTemplate.sb.r = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.sb.r > 255) {
+      
+      ngScope.colorTemplate.sb.r = 255;
+      changed = true;
+
+    }
+
+    if (ngScope.colorTemplate.sb.g < 0) {
+      
+      ngScope.colorTemplate.sb.g = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.sb.g > 255) {
+      
+      ngScope.colorTemplate.sb.g = 255;
+      changed = true;
+
+    }
+
+    if (ngScope.colorTemplate.sb.b < 0) {
+      
+      ngScope.colorTemplate.sb.b = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.sb.b > 255) {
+      
+      ngScope.colorTemplate.sb.b = 255;
+      changed = true;
+
+    }
+
+    if (ngScope.colorTemplate.ab.r < 0) {
+      
+      ngScope.colorTemplate.ab.r = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.ab.r > 255) {
+      
+      ngScope.colorTemplate.ab.r = 255;
+      changed = true;
+
+    }
+    
+    if (ngScope.colorTemplate.ab.g < 0) {
+      
+      ngScope.colorTemplate.ab.g = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.ab.g > 255) {
+      
+      ngScope.colorTemplate.ab.g = 255;
+      changed = true;
+
+    }
+    
+    if (ngScope.colorTemplate.ab.b < 0) {
+      
+      ngScope.colorTemplate.ab.b = 0;
+      changed = true;
+
+    } else if (ngScope.colorTemplate.ab.b > 255) {
+      
+      ngScope.colorTemplate.ab.b = 255;
+      changed = true;
+
+    }
+
+    return changed;
+
+  }
+
+  function ComputeStats(ngScope) {
+
+    rDiff = ngScope.colorTemplate.sb.r - ngScope.colorTemplate.ab.r;
+    gDiff = ngScope.colorTemplate.sb.g - ngScope.colorTemplate.ab.g;
+    bDiff = ngScope.colorTemplate.sb.b - ngScope.colorTemplate.ab.b;
+
+    hDiff = ngScope.colorTemplate.sb.h - ngScope.colorTemplate.ab.h;
+    sDiff = ngScope.colorTemplate.sb.s - ngScope.colorTemplate.ab.s;
+    vDiff = ngScope.colorTemplate.sb.v - ngScope.colorTemplate.ab.v;
+
+    ngScope.rDiff_Str = CreateDiffString(rDiff, ngScope.colorTemplate.ab.r);
+    ngScope.gDiff_Str = CreateDiffString(gDiff, ngScope.colorTemplate.ab.g);
+    ngScope.bDiff_Str = CreateDiffString(bDiff, ngScope.colorTemplate.ab.b);
+
+    ngScope.hDiff_Str = CreateDiffString(hDiff, ngScope.colorTemplate.ab.h);
+    ngScope.sDiff_Str = CreateDiffString(sDiff, ngScope.colorTemplate.ab.s);
+    ngScope.vDiff_Str = CreateDiffString(vDiff, ngScope.colorTemplate.ab.v);
+
+  }
+
+  function DrawFunctor(ngScope, canvasElement) {
+
+    ctx = canvasElement.getContext('2d');
+
+/// Clear the canvas
+    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+    bars_Width = canvasElement.width;
+    begin_Offset_X = 0;
+    begin_Offset_Y = 0;
+    begin_Offset_Text_X = 15;
+    font_height = 14;
+
+    sbStartY = begin_Offset_Y;
+    abStartY = begin_Offset_Y + ngScope.sbHeight;
+
+/// Calculate Y values for text (place vertically center in rectangles)
+    half_font_height = (font_height / 2.0);
+    sbTextBaseline = ((abStartY + sbStartY) / 2.0) + half_font_height;
+    abTextBaseline = ((abStartY + (abStartY + ngScope.abHeight)) / 2.0) + half_font_height;
+
+/// Fill colors for respective rectangles
+    sbFillColor = ngScope.colorTemplate.sb.GetFillStyle();;
+    abFillColor = ngScope.colorTemplate.ab.GetFillStyle();;
+
+/// Draw StatusBar
+    ctx.fillStyle = sbFillColor;
+
+    ctx.fillRect(
+      begin_Offset_X,
+      sbStartY,
+      bars_Width,
+      ngScope.sbHeight
+    );
+
+/// Draw ActionBar
+    ctx.fillStyle = abFillColor;
+
+    ctx.fillRect(
+      begin_Offset_X,
+      abStartY,
+      bars_Width,
+      ngScope.abHeight
+    );
+
+/// Draw Text
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = font_height + "px Segoe UI";
+
+/// StatusBar Text
+
+    ctx.fillText(
+      sbFillColor + "        R,G,B: " + ngScope.colorTemplate.sb.RGB_ToString()
+        + "        H,S,V: " + ngScope.colorTemplate.sb.HSV_ToString(),
+      begin_Offset_Text_X,
+      sbTextBaseline
+    );
+
+/// ActionBar Text
+
+    ctx.fillText(
+      abFillColor + "        R,G,B: " + ngScope.colorTemplate.ab.RGB_ToString()
+        + "        H,S,V: " + ngScope.colorTemplate.ab.HSV_ToString(),
+      begin_Offset_Text_X,
+      abTextBaseline
+    );
+
+  }
+
+  function UpdateModelAndView($scope, canvasElement) {
+
+    SanityCheck($scope);
+
+    canvasElement.height = $scope.abHeight + $scope.sbHeight;
+
+    ComputeStats($scope);
+    DrawFunctor($scope, canvasElement);
+
+  }
+
+////////////////////////////////
+///
+
+/// Init AngularJS app
+  var app = angular.module('colorPreview', []);
+
+/// Get DOMs
+  var canvasElement = document.getElementById('myCanvas');
+  var colorPreviewElement = document.getElementById('colorPreviewID');
+
+/// Init Controllers
+
+  app.controller(
+    'colorPreviewController',
+    [
+      '$scope',
+      function($scope) {
+
+        $scope.ColorPreviewInit = function() {
+
+          $scope.sbHeight = 64;
+          $scope.abHeight = 96;
+
+          $scope.sampleTemplates = examplesDict_Original;
+          $scope.colorTemplate = $scope.sampleTemplates['selFocal'];
+
+          $scope.selExample = 'selFocal';
+
+          UpdateModelAndView($scope, canvasElement);
+
+        };
+
+        $scope.ExampleSelectorChanged = function() {
+
+          key = $scope.selExample;
+          $scope.colorTemplate = $scope.sampleTemplates[key];
+
+          UpdateModelAndView($scope, canvasElement);
+
+        }
+
+        $scope.DrawColors = function() {
+          UpdateModelAndView($scope, canvasElement);
+        };
+
+      }
+    ]
+  );
+
+</script>
